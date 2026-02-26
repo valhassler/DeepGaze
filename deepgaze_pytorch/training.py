@@ -20,7 +20,7 @@ import pysaliency
 from pysaliency.filter_datasets import iterate_crossvalidation
 from pysaliency.plotting import visualize_distribution
 import torch
-from torch.utils.tensorboard import SummaryWriter
+import wandb
 from tqdm import tqdm
 import yaml
 
@@ -192,7 +192,7 @@ def _train(this_directory,
     if startwith is not None:
         restore_from_checkpoint(model, optimizer, lr_scheduler, startwith)
 
-    writer = SummaryWriter(os.path.join(this_directory, 'log'), flush_secs=30)
+    stage = os.path.basename(this_directory)
 
     columns = ['epoch', 'timestamp', 'learning_rate', 'loss']
     print("validation metrics", validation_metrics)
@@ -211,14 +211,13 @@ def _train(this_directory,
             '{}/step-{:04d}.pth'.format(this_directory, step),
         )
 
-        #f = visualize(model, vis_data_loader)
-        #display_if_in_IPython(f)
-
-        #writer.add_figure('prediction', f, step)
-        writer.add_scalar('training/loss', last_loss, step)
-        writer.add_scalar('training/learning_rate', optimizer.state_dict()['param_groups'][0]['lr'], step)
-        writer.add_scalar('parameters/sigma', model.finalizer.gauss.sigma.detach().cpu().numpy(), step)
-        writer.add_scalar('parameters/center_bias_weight', model.finalizer.center_bias_weight.detach().cpu().numpy()[0], step)
+        if wandb.run is not None:
+            wandb.log({
+                f'{stage}/training/loss': last_loss,
+                f'{stage}/training/learning_rate': optimizer.state_dict()['param_groups'][0]['lr'],
+                f'{stage}/parameters/sigma': float(model.finalizer.gauss.sigma.detach().cpu()),
+                f'{stage}/parameters/center_bias_weight': float(model.finalizer.center_bias_weight.detach().cpu()[0]),
+            }, step=step)
 
         if step % validation_epochs == 0:
             _val_metrics = eval_epoch(model, val_loader, val_baseline_log_likelihood, device, metrics=validation_metrics)
@@ -229,8 +228,8 @@ def _train(this_directory,
         for key, value in _val_metrics.items():
             val_metrics[key].append(value)
 
-        for key, value in _val_metrics.items():
-            writer.add_scalar(f'validation/{key}', value, step)
+        if _val_metrics and wandb.run is not None:
+            wandb.log({f'{stage}/validation/{key}': value for key, value in _val_metrics.items()}, step=step)
 
         new_row = {
             'epoch': step,

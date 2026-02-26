@@ -243,9 +243,10 @@ class DeepGazeIII(torch.nn.Module):
         x = self.saliency_network(x)
 
         if self.scanpath_network is not None:
-            scanpath_features = encode_scanpath_features(x_hist, y_hist, size=(orig_shape[2], orig_shape[3]), device=x.device)
-            #scanpath_features = F.interpolate(scanpath_features, scale_factor=1 / self.downsample / self.readout_factor)
-            scanpath_features = F.interpolate(scanpath_features, readout_shape)
+            # Scale fixation coordinates from original image space to readout space
+            x_hist_scaled = x_hist * readout_shape[1] / orig_shape[3]
+            y_hist_scaled = y_hist * readout_shape[0] / orig_shape[2]
+            scanpath_features = encode_scanpath_features(x_hist_scaled, y_hist_scaled, size=readout_shape, device=x.device)
             y = self.scanpath_network(scanpath_features)
         else:
             y = None
@@ -310,8 +311,10 @@ class DeepGazeIIIMixture(torch.nn.Module):
             x = saliency_network(readout_input)
 
             if scanpath_network is not None:
-                scanpath_features = encode_scanpath_features(x_hist, y_hist, size=(orig_shape[2], orig_shape[3]), device=x.device)
-                scanpath_features = F.interpolate(scanpath_features, readout_shape)
+                # Scale fixation coordinates from original image space to readout space
+                x_hist_scaled = x_hist * readout_shape[1] / orig_shape[3]
+                y_hist_scaled = y_hist * readout_shape[0] / orig_shape[2]
+                scanpath_features = encode_scanpath_features(x_hist_scaled, y_hist_scaled, size=readout_shape, device=x.device)
                 y = scanpath_network(scanpath_features)
             else:
                 y = None

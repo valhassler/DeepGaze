@@ -60,10 +60,19 @@ def auc(log_density, fixation_mask, weights=None):
         positives = torch.masked_select(log_density, dense_mask.type(torch.bool)).detach().cpu().numpy().astype(np.float64)
         negatives = log_density.flatten().detach().cpu().numpy().astype(np.float64)
 
+        # Handle case where there are no fixations in this image
+        if len(positives) == 0:
+            return torch.tensor(np.nan)
+        
         auc = _general_auc(positives, negatives)
 
         return torch.tensor(auc)
 
-    return torch.mean(weights.cpu() * torch.tensor([
+    aucs = torch.tensor([
         image_auc(log_density[i], fixation_mask[i]) for i in range(log_density.shape[0])
-    ]))
+    ])
+    # Filter out NaN values before computing mean
+    valid_aucs = aucs[~torch.isnan(aucs)]
+    if len(valid_aucs) == 0:
+        return torch.tensor(0.0)
+    return torch.mean(weights.cpu()[~torch.isnan(aucs)] * valid_aucs)
