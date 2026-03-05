@@ -172,7 +172,8 @@ def _train(this_directory,
           validation_metrics=['IG', 'LL', 'AUC', 'NSS'],
           validation_epochs=1,
           startwith=None,
-          device=None):
+          device=None,
+          stage_name=None):
     mkdir_p(this_directory)
 
     if os.path.isfile(os.path.join(this_directory, 'final.pth')):
@@ -192,7 +193,7 @@ def _train(this_directory,
     if startwith is not None:
         restore_from_checkpoint(model, optimizer, lr_scheduler, startwith)
 
-    stage = os.path.basename(this_directory)
+    stage = stage_name if stage_name is not None else os.path.basename(this_directory)
 
     columns = ['epoch', 'timestamp', 'learning_rate', 'loss']
     print("validation metrics", validation_metrics)
