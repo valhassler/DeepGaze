@@ -173,12 +173,22 @@ def _train(this_directory,
           validation_epochs=1,
           startwith=None,
           device=None,
-          stage_name=None):
+          stage_name=None,
+          max_epochs=None,
+          wandb_step_offset=0):
     mkdir_p(this_directory)
 
     if os.path.isfile(os.path.join(this_directory, 'final.pth')):
         print("Training Already finished")
-        return
+        # Return a best-effort step count from existing log so offset stays correct
+        log_path = os.path.join(this_directory, 'log.csv')
+        if os.path.isfile(log_path):
+            try:
+                import pandas as _pd
+                return int(_pd.read_csv(log_path)['epoch'].max()) + 1
+            except Exception:
+                pass
+        return 0
 
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -218,7 +228,7 @@ def _train(this_directory,
                 f'{stage}/training/learning_rate': optimizer.state_dict()['param_groups'][0]['lr'],
                 f'{stage}/parameters/sigma': float(model.finalizer.gauss.sigma.detach().cpu()),
                 f'{stage}/parameters/center_bias_weight': float(model.finalizer.center_bias_weight.detach().cpu()[0]),
-            }, step=step)
+            }, step=wandb_step_offset + step)
 
         if step % validation_epochs == 0:
             _val_metrics = eval_epoch(model, val_loader, val_baseline_log_likelihood, device, metrics=validation_metrics)
@@ -230,7 +240,7 @@ def _train(this_directory,
             val_metrics[key].append(value)
 
         if _val_metrics and wandb.run is not None:
-            wandb.log({f'{stage}/validation/{key}': value for key, value in _val_metrics.items()}, step=step)
+            wandb.log({f'{stage}/validation/{key}': value for key, value in _val_metrics.items()}, step=wandb_step_offset + step)
 
         new_row = {
             'epoch': step,
@@ -288,6 +298,9 @@ def _train(this_directory,
         print(progress)
 
     while optimizer.state_dict()['param_groups'][0]['lr'] >= minimum_learning_rate:
+        if max_epochs is not None and step >= max_epochs:
+            print(f"Reached max_epochs={max_epochs}, stopping early.")
+            break
         step += 1
         last_loss = train_epoch(model, train_loader, optimizer, device)
         save_step()
@@ -307,3 +320,5 @@ def _train(this_directory,
     for filename in glob.glob(os.path.join(this_directory, 'step-*')):
         print("removing", filename)
         os.remove(filename)
+
+    return step
